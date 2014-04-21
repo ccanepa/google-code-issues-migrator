@@ -228,6 +228,10 @@ def get_gcode_issue(issue_summary):
     return issue
 
 def gcode_issues_summary():
+    """
+    this gets only a short version of each issue, like seen in the index pages
+    for googlecode issues
+    """
     count = 100
     start_index = 0
     issues = []
@@ -242,15 +246,14 @@ def gcode_issues_summary():
             break
     return issues
 
-def process_gcode_issues(existing_issues):
-    """ Migrates all Google Code issues in the given dictionary to Github. """
 
-    issues = gcode_issues_summary()
+def process_gcode_issues(existing_issues, gcode_issues):
+    """ Migrates all Google Code issues in the given dictionary to Github.
+            gcode_issues : list all of gcode issues in the fledged form
+    """
     previous_gid = 1
 
-    for issue in issues:
-        issue = get_gcode_issue(issue)
-
+    for issue in gcode_issues:
         if options.skip_closed and (issue['state'] == 'closed'):
             continue
 
@@ -380,7 +383,15 @@ if __name__ == "__main__":
     try:
         existing_issues = get_existing_github_issues()
         log_rate_info()
-        process_gcode_issues(existing_issues)
+
+        summary = gcode_issues_summary()
+        #gcode_issues = [ get_gcode_issue(short_issue) for short_issue in summary]
+        gcode_issues = []
+        for short_issue in gcode_summary:
+            issue = get_gcode_issue(short_issue)
+            gcode_issues.append(issue)
+
+        process_gcode_issues(existing_issues, gcode_issues)
     except Exception:
         parser.print_help()
         raise
