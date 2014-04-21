@@ -227,7 +227,7 @@ def get_gcode_issue(issue_summary):
 
     return issue
 
-def get_gcode_issues():
+def gcode_issues_summary():
     count = 100
     start_index = 0
     issues = []
@@ -239,13 +239,13 @@ def get_gcode_issues():
             issues.pop()
             start_index += count
         else:
-            return issues
-
+            break
+    return issues
 
 def process_gcode_issues(existing_issues):
     """ Migrates all Google Code issues in the given dictionary to Github. """
 
-    issues = get_gcode_issues()
+    issues = gcode_issues_summary()
     previous_gid = 1
 
     for issue in issues:
