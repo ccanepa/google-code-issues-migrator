@@ -20,9 +20,9 @@ logging.basicConfig(level = logging.ERROR)
 
 GOOGLE_MAX_RESULTS = 25
 
-GOOGLE_ISSUE_TEMPLATE = '_Original issue: {}_'
-GOOGLE_ISSUES_URL = 'https://code.google.com/p/{}/issues/csv?can=1&num={}&start={}&colspec=ID%20Type%20Status%20Owner%20Summary%20Opened%20Closed%20Reporter&sort=id'
-GOOGLE_URL = 'http://code.google.com/p/{}/issues/detail?id={}'
+GOOGLE_ISSUE_TEMPLATE = '_Original issue: {0}_'
+GOOGLE_ISSUES_URL = 'https://code.google.com/p/{0}/issues/csv?can=1&num={1}&start={2}&colspec=ID%20Type%20Status%20Owner%20Summary%20Opened%20Closed%20Reporter&sort=id'
+GOOGLE_URL = 'http://code.google.com/p/{0}/issues/detail?id={1}'
 GOOGLE_URL_RE = 'http://code.google.com/p/%s/issues/detail\?id=(\d+)'
 GOOGLE_ID_RE = GOOGLE_ISSUE_TEMPLATE.format(GOOGLE_URL_RE)
 
@@ -139,14 +139,14 @@ def get_attachments(link, attachments):
         # Linking to the comment with the attachment rather than the
         # attachment itself since Google Code uses download tokens for
         # attachments
-        body += '**Attachment:** [{}]({})'.format(attachment('b').text().encode('utf-8'), link)
+        body += '**Attachment:** [{0}]({1})'.format(attachment('b').text().encode('utf-8'), link)
     return body
 
 
 def get_gcode_issue(issue_summary):
     def get_author(doc):
         userlink = doc('.userlink')
-        return '[{}](https://code.google.com{})'.format(userlink.text(), userlink.attr('href'))
+        return '[{0}](https://code.google.com{1})'.format(userlink.text(), userlink.attr('href'))
 
     # Populate properties available from the summary CSV
     issue = {
@@ -218,7 +218,7 @@ def get_gcode_issue(issue_summary):
         if updates:
             body += '\n\n' + updates.html().strip().replace('\n', '').replace('<b>', '**').replace('</b>', '**').replace('<br/>', '\n')
 
-        body += get_attachments('{}#{}'.format(issue['link'], comment.attr('id')), comment('.attachments'))
+        body += get_attachments('{0}#{1}'.format(issue['link'], comment.attr('id')), comment('.attachments'))
 
         # Strip the placeholder text if there's any other updates
         body = body.replace('(No comment was entered for this change.)\n\n', '')
