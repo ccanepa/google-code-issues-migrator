@@ -1,30 +1,19 @@
 #!/usr/bin/env python
 
-import csv
 import getpass
 import logging
 import optparse
 import re
 import sys
-import urllib2
 
 from datetime import datetime
 
 from github import Github
 from github import GithubException
-from pyquery import PyQuery as pq
+
+import gcodeissues as gi
 
 logging.basicConfig(level = logging.ERROR)
-
-# The maximum number of records to retrieve from Google Code in a single request
-
-GOOGLE_MAX_RESULTS = 25
-
-GOOGLE_ISSUE_TEMPLATE = '_Original issue: {0}_'
-GOOGLE_ISSUES_URL = 'https://code.google.com/p/{0}/issues/csv?can=1&num={1}&start={2}&colspec=ID%20Type%20Status%20Owner%20Summary%20Opened%20Closed%20Reporter&sort=id'
-GOOGLE_URL = 'http://code.google.com/p/{0}/issues/detail?id={1}'
-GOOGLE_URL_RE = 'http://code.google.com/p/%s/issues/detail\?id=(\d+)'
-GOOGLE_ID_RE = GOOGLE_ISSUE_TEMPLATE.format(GOOGLE_URL_RE)
 
 # The minimum number of remaining Github rate-limited API requests before we pre-emptively
 # abort to avoid hitting the limit part-way through migrating an issue.
@@ -127,124 +116,6 @@ def add_comments_to_issue(github_issue, gcode_issue):
             output('.')
 
 
-def get_attachments(link, attachments):
-    if not attachments:
-        return ''
-
-    body = '\n\n'
-    for attachment in (pq(a) for a in attachments):
-        if not attachment('a'): # Skip deleted attachments
-            continue
-
-        # Linking to the comment with the attachment rather than the
-        # attachment itself since Google Code uses download tokens for
-        # attachments
-        body += '**Attachment:** [{0}]({1})'.format(attachment('b').text().encode('utf-8'), link)
-    return body
-
-
-def get_gcode_issue(issue_summary):
-    def get_author(doc):
-        userlink = doc('.userlink')
-        return '[{0}](https://code.google.com{1})'.format(userlink.text(), userlink.attr('href'))
-
-    # Populate properties available from the summary CSV
-    issue = {
-        'gid': int(issue_summary['ID']),
-        'title': issue_summary['Summary'].replace('%', '&#37;'),
-        'link': GOOGLE_URL.format(google_project_name, issue_summary['ID']),
-        'owner': issue_summary['Owner'],
-        'state': 'closed' if issue_summary['Closed'] else 'open',
-        'date': datetime.fromtimestamp(float(issue_summary['OpenedTimestamp'])),
-        'status': issue_summary['Status'].lower()
-    }
-
-    # Build a list of labels to apply to the new issue, including an 'imported' tag that
-    # we can use to identify this issue as one that's passed through migration.
-    labels = ['imported']
-    for label in issue_summary['AllLabels'].split(', '):
-        if label.startswith('Priority-') and options.omit_priority:
-            continue
-        labels.append(LABEL_MAPPING.get(label, label))
-
-    # Add additional labels based on the issue's state
-    if issue['status'] in STATE_MAPPING:
-        labels.append(STATE_MAPPING[issue['status']])
-
-    issue['labels'] = labels
-
-    # Scrape the issue details page for the issue body and comments
-    opener = urllib2.build_opener()
-    if options.google_code_cookie:
-        opener.addheaders = [('Cookie', options.google_code_cookie)]
-    doc = pq(opener.open(issue['link']).read())
-
-    description = doc('.issuedescription .issuedescription')
-    issue['author'] = get_author(description)
-
-    issue['comments'] = []
-    def split_comment(comment, text):
-        # Github has an undocumented maximum comment size (unless I just failed
-        # to find where it was documented), so split comments up into multiple
-        # posts as needed.
-        while text:
-            comment['body'] = text[:7000]
-            text = text[7000:]
-            if text:
-                comment['body'] += '...'
-                text = '...' + text
-            issue['comments'].append(comment.copy())
-
-    split_comment(issue, description('pre').text())
-    issue['content'] = u'_From {author} on {date:%B %d, %Y %H:%M:%S}_\n\n{content}{attachments}\n\n{footer}'.format(
-            content = issue['comments'].pop(0)['body'],
-            footer = GOOGLE_ISSUE_TEMPLATE.format(GOOGLE_URL.format(google_project_name, issue['gid'])),
-            attachments = get_attachments(issue['link'], doc('.issuedescription .issuedescription .attachments')),
-            **issue)
-
-    issue['comments'] = []
-    for comment in doc('.issuecomment'):
-        comment = pq(comment)
-        if not comment('.date'):
-            continue # Sign in prompt line uses same class
-        if comment.hasClass('delcom'):
-            continue # Skip deleted comments
-
-        date = parse_gcode_date(comment('.date').attr('title'))
-        body = comment('pre').text()
-        author = get_author(comment)
-
-        updates = comment('.updates .box-inner')
-        if updates:
-            body += '\n\n' + updates.html().strip().replace('\n', '').replace('<b>', '**').replace('</b>', '**').replace('<br/>', '\n')
-
-        body += get_attachments('{0}#{1}'.format(issue['link'], comment.attr('id')), comment('.attachments'))
-
-        # Strip the placeholder text if there's any other updates
-        body = body.replace('(No comment was entered for this change.)\n\n', '')
-
-        split_comment({'date': date, 'author': author}, body)
-
-    return issue
-
-def gcode_issues_summary():
-    """
-    this gets only a short version of each issue, like seen in the index pages
-    for googlecode issues
-    """
-    count = 100
-    start_index = 0
-    issues = []
-    while True:
-        url = GOOGLE_ISSUES_URL.format(google_project_name, count, start_index)
-        issues.extend(row for row in csv.DictReader(urllib2.urlopen(url), dialect=csv.excel))
-
-        if issues and 'truncated' in issues[-1]['ID']:
-            issues.pop()
-            start_index += count
-        else:
-            break
-    return issues
 
 
 def process_gcode_issues(existing_issues, gcode_issues):
@@ -323,6 +194,22 @@ def get_existing_github_issues():
         raise
     return issue_map
 
+def autoedit_gcode_issue(issue):
+    """applies transformations for github migration compatibility"""
+    # add an 'imported' label to help multipass migration / updates
+    issue.labels.insert(0, 'imported')
+
+    # filter out uninteresting labels (-> estaria implicito en el que sigue)
+    if options.omit_priority:
+        issue.labels = [ label for label in issue.labels
+                                         if not label.startswith('Priority-')]
+
+    # apply a custom label mapping
+    issue.labels = [ LABEL_MAPPING(label) for label in issue.labels
+                                                    if label in LABEL_MAPPING ]
+    # Add additional labels based on the issue's state
+    if issue['status'] in STATE_MAPPING:
+        issue.labels.append(STATE_MAPPING[issue['status']])
 
 def log_rate_info():
     logging.info('Rate limit (remaining/total) %r', github.rate_limiting)
@@ -384,13 +271,17 @@ if __name__ == "__main__":
         existing_issues = get_existing_github_issues()
         log_rate_info()
 
-        summary = gcode_issues_summary()
+        gcode_index = gi.gcode_issues_index()
         #gcode_issues = [ get_gcode_issue(short_issue) for short_issue in summary]
         gcode_issues = []
-        for short_issue in gcode_summary:
-            issue = get_gcode_issue(short_issue)
+        for short_issue in gcode_index:
+            issue = gi.get_gcode_issue(short_issue)
             gcode_issues.append(issue)
 
+        # map(autoedit_gcode_issue, gcode_issues)
+        for issue in gcode_issues:
+            autoedit_gcode_issue(issue)
+        
         process_gcode_issues(existing_issues, gcode_issues)
     except Exception:
         parser.print_help()
