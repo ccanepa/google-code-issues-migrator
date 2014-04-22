@@ -204,7 +204,11 @@ def as_editable_text(issues):
     issues_txt = issue_separator.join(issues_parts)
     return issues_txt
 
-def main():
+def main(index_local, issues_local):
+    """
+    index_local : True loads the index from local storage, False from googlecode
+    issues_local : True loads the full fledged issues from local storage, False from googlecode
+    """
     if len(sys.argv) < 3 or sys.argv[1] == '-h' or sys.argv[1] == '--help':
         script = os.path.basename(sys.argv[0])
         usage = "Read all issues from a Google Code project." \
@@ -213,25 +217,44 @@ def main():
         sys.exit()
     google_project_name = sys.argv[1]
     outdir = sys.argv[2]
-    if os.path.exists(outdir):
-        print 'outdir exist, refusing to overwrite. Nothing done. outdir:', outdir
+    if (index_local or issues_local) and not os.path.exists(outdir):
+        print "Error: asking for local sources but outdir does not exist. outdir:", outdir
+        sys.exit(1)
+    if  (not index_local and not issues_local) and os.path.exists(outdir):
+        print 'Error: asking for all external sources but outdir exist, refusing to overwrite.' \
+              ' Nothing done. outdir:', outdir
+        sys.exit(1)
+    if (not index_local and not issues_local):
+        os.mkdir(outdir)
 
-    # build and store locally the index
-    gcode_index = gcode_issues_index(google_project_name)
     fname = os.path.join(outdir, 'gcode_issues_index.pkl')
-    with open(fname, "wb") as f:
-        pickle.dump(gcode_index, f)
-    print "*** issues index pickled"
+    if index_local:
+        # load index from local storage
+        with open(fname, 'rb') as f:
+            gcode_index = pickle.load(f)
+        print "*** issues index loaded from local storage"
+    else:
+        # build and store locally the index
+        gcode_index = gcode_issues_index(google_project_name)
+        with open(fname, "wb") as f:
+            pickle.dump(gcode_index, f)
+        print "*** issues index pickled"
 
-    # build and store locally the detailed issues
-    gcode_issues = []
-    for short_issue in gcode_index:
-        issue = get_gcode_issue_new(google_project_name, short_issue)
-        gcode_issues.append(issue)
     fname = os.path.join(outdir, 'gcode_issues_detailed.pkl')
-    with open(fname, "wb") as f:
-        pickle.dump(gcode_issues, f)
-    print "*** detailed issues  pickled"
+    if issues_local:
+        # load full fledged issues from local storage
+        with open(fname, 'rb') as f:
+            gcode_issues = pickle.load(f)
+        print "*** full fledged issues loaded from local storage"
+    else:
+        # build and store locally the detailed issues
+        gcode_issues = []
+        for short_issue in gcode_index:
+            issue = get_gcode_issue_new(google_project_name, short_issue)
+            gcode_issues.append(issue)
+        with open(fname, "wb") as f:
+            pickle.dump(gcode_issues, f)
+        print "*** detailed issues  pickled"
 
     # store locally an editable view of issues text
     text = as_editable_text(gcode_issues)
@@ -239,6 +262,9 @@ def main():
     fname = os.path.join(outdir, 'gcode_issues_text.txt')
     with open(fname, 'wb') as f:
         f.write(out_bytes)
+    print "*** editable issues text stored in local storage"
 
 if __name__ == "__main__":
-    main()
+    index_local = False
+    issues_local = False
+    main(index_local, issues_local)
