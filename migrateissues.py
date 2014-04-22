@@ -23,6 +23,9 @@ GOOGLE_ID_RE = gi.GOOGLE_ISSUE_TEMPLATE.format(GOOGLE_URL_RE)
 
 GITHUB_SPARE_REQUESTS = 50
 
+# The maximun characters per comment in Github, a guess because undocumented
+MAX_COMMENT_LENGHT = 7000
+
 # Mapping from Google Code issue labels to Github labels
 
 LABEL_MAPPING = {
@@ -206,6 +209,24 @@ def autoedit_gcode_issue(issue):
         issue.labels.append(STATE_MAPPING[issue['status']])
 
 
+def split_long_comments(issue):
+    """expects issue in the format produced by get_gcode_issue"""
+    new_comments = []
+    for comment in issue.comments:
+        if len(comment['body']) > MAX_COMMENT_LENGHT - 3:
+            text = comment['body']
+            comment['body'] = ''
+            while len(text) > len(u'...'):
+                new_comment = comment.copy()
+                new_comment['body'] = text[MAX_COMMENT_LENGHT - 3:] + u'...'
+                new_comments.append(comment)
+                text = u'...' + text[:MAX_COMMENT_LENGHT - 3]
+        else:
+            new_comments.append(comment)
+
+    issue['comments'] = new_comments            
+
+
 def log_rate_info():
     logging.info('Rate limit (remaining/total) %r', github.rate_limiting)
     # Note: this requires extended version of PyGithub from tfmorris/PyGithub repo
@@ -284,6 +305,10 @@ if __name__ == "__main__":
         # map(autoedit_gcode_issue, gcode_issues)
         for issue in gcode_issues:
             autoedit_gcode_issue(issue)
+
+        # limit the comment lengh for github
+        for issue in gcode_issues:
+            split_long_comments(issue)
         
         process_gcode_issues(existing_issues, gcode_issues)
     except Exception:

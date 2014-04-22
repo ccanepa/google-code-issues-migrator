@@ -24,6 +24,7 @@ _Original issue: {footer}_
 EXPORTED_COMMENT_FORMAT_TEMPLATE = u"""
 """
 
+
 def gcode_issues_index(google_project_name):
     """
     Returns a list with all the issues (in short form) found in googlecode 
@@ -80,7 +81,7 @@ def gcode_issues_index(google_project_name):
         short_issues.extend(row for row in csv.DictReader(urllib2.urlopen(url),
                                                           dialect=csv.excel))
 
-        if 0:  ## DEBUG short_issues and b'truncated' in short_issues[-1][b'ID']:
+        if short_issues and b'truncated' in short_issues[-1][b'ID']:
             short_issues.pop()
             start_index += count
         else:
@@ -94,7 +95,7 @@ def get_attachments(link, attachments):
 
     body = u'\n\n'
     for attachment in (pq(a) for a in attachments):
-        if not attachment('a'): # Skip deleted attachments
+        if not attachment('a'):  # Skip deleted attachments
             continue
 
         # Linking to the comment with the attachment rather than the
@@ -136,130 +137,55 @@ def get_gcode_issue_new(google_project_name, short_issue):
     doc = pq(opener.open(issue['link']).read())
     description = doc('.issuedescription .issuedescription')
     issue['author'] = get_author(description)
-    issue['content'] = description('pre').text()  # -> explorando en drampie esto es unicode
 
-    for comment in doc('.issuecomment'):
-        comment = pq(comment)
-        if not comment('.date'):
-            continue  # Sign in prompt line uses same class
-        if comment.hasClass('delcom'):
-            continue  # Skip deleted comments
+    comments = []
 
-        date = parse_gcode_date(comment('.date').attr('title'))
-        body = comment('pre').text()
-        author = get_author(comment)
-
-        updates = comment('.updates .box-inner')
-        if updates:
-            body += '\n\n' + updates.html().strip().replace('\n', '').replace('<b>', '**').replace('</b>', '**').replace('<br/>', '\n')
-
-        body += get_attachments('{0}#{1}'.format(issue['link'], comment.attr('id')), comment('.attachments'))
-
-        # Strip the placeholder text if there's any other updates
-        body = body.replace('(No comment was entered for this change.)\n\n', '')
-
-def get_doc(short_issue):
-    google_project_name = 'los-cocos'
-    def get_author(doc):
-        userlink = doc('.userlink')
-        return '[{0}](https://code.google.com{1})'.format(userlink.text(), userlink.attr('href'))
-
-    # Populate properties available from the summary CSV
-    issue = {
-        'gid': int(short_issue[b'ID']),
-        'title': short_issue['Summary'].replace('%', '&#37;'),
-        'link': GOOGLE_URL.format(google_project_name, short_issue[b'ID']),
-        'owner': short_issue[b'Owner'],
-        'state': 'closed' if short_issue[b'Closed'] else 'open',
-        'date': datetime.fromtimestamp(float(short_issue[b'OpenedTimestamp'])),
-        'status': short_issue[b'Status'].lower()
-    }
-
-    # Scrape the issue details page for the issue body and comments
-    opener = urllib2.build_opener()
-    # this no loner works, now there's a captcha to access email of posters
-    ##if options.google_code_cookie:
-    ##    opener.addheaders = [('Cookie', options.google_code_cookie)]
-
-    doc = pq(opener.open(issue['link']).read())
-    return issue, doc
-
-def get_gcode_issue(google_project_name, short_issue):
-    def get_author(doc):
-        userlink = doc('.userlink')
-        return '[{0}](https://code.google.com{1})'.format(userlink.text(), userlink.attr('href'))
-
-    # Populate properties available from the summary CSV
-    issue = {
-        'gid': int(short_issue[b'ID']),
-        'title': short_issue['Summary'].replace('%', '&#37;'),
-        'link': GOOGLE_URL.format(google_project_name, short_issue[b'ID']),
-        'owner': short_issue[b'Owner'],
-        'state': 'closed' if short_issue[b'Closed'] else 'open',
-        'date': datetime.fromtimestamp(float(short_issue[b'OpenedTimestamp'])),
-        'status': short_issue[b'Status'].lower()
-    }
-
-    # Scrape the issue details page for the issue body and comments
-    opener = urllib2.build_opener()
-    doc = pq(opener.open(issue['link']).read())
+    # comments[0] ~ the Original Post in the issue
+    date = issue['date']
+    author = issue['author']
+    
     description = doc('.issuedescription .issuedescription')
-    issue['author'] = get_author(description)
-
-    issue['comments'] = []
-
-    def split_comment(comment, text):
-        # Github has an undocumented maximum comment size (unless I just failed
-        # to find where it was documented), so split comments up into multiple
-        # posts as needed.
-        while text:
-            comment['body'] = text[:7000]
-            text = text[7000:]
-            if text:
-                comment['body'] += '...'
-                text = '...' + text
-            issue['comments'].append(comment.copy())
-
-    split_comment(issue, description('pre').text())
-    content = issue['comments'].pop(0)['body']
+    OP_text = description('pre').text()
     footer = GOOGLE_URL.format(google_project_name, issue['gid'])
     attachments = get_attachments(issue['link'], doc('.issuedescription .issuedescription .attachments'))
-    issue['content'] = EXPORTED_OP_FORMAT_TEMPLATE.format(
-            content=content,
-            footer=footer,
-            attachments=attachments,
-            **issue)
+    # body was issue['content'] minus the division if too longer
+    body = EXPORTED_OP_FORMAT_TEMPLATE.format(content=OP_text,
+                                              footer=footer,
+                                              attachments=attachments,
+                                              **issue)
+    comment = {'date': date, 'author': author, 'body': body}
+    comments.append(comment)
 
-EXPORTED_COMMENT_FORMAT_TEMPLATE = u"""{body}{updates}{attachments}"""
-
-    # comments have fields date, author, body
-    issue['comments'] = []
-    for comment in doc('.issuecomment'):
-        comment = pq(comment)
-        if not comment('.date'):
+    # add the comments
+    for google_comment in doc('.issuecomment'):
+        pq_comment = pq(google_comment)
+        if not pq_comment('.date'):
             continue  # Sign in prompt line uses same class
-        if comment.hasClass('delcom'):
+        if pq_comment.hasClass('delcom'):
             continue  # Skip deleted comments
 
-        date = parse_gcode_date(comment('.date').attr('title'))
-        body = comment('pre').text()
-        author = get_author(comment)
+        date = parse_gcode_date(pq_comment('.date').attr('title'))
+        author = get_author(pq_comment)
 
-        updates = comment('.updates .box-inner')
+        comment_text = pq_comment('pre').text()
+
+        updates = pq_comment('.updates .box-inner')
         if updates:
             raw = updates.html().strip().replace('\n', '').replace('<b>', '**').replace('</b>', '**').replace('<br/>', '\n')
             updates_text = u'\n\n' + raw.decode('utf-8')
         else:
             updates_text = u''
 
-        attachments_text = get_attachments('{0}#{1}'.format(issue['link'], comment.attr('id')), comment('.attachments'))
+        attachments_text = get_attachments('{0}#{1}'.format(issue['link'], pq_comment.attr('id')), pq_comment('.attachments'))
 
-        body = EXPORTED_COMMENT_FORMAT_TEMPLATE.format(body=body, updates=updates_text, attachments=attachments_text)
+        body = comment_text + updates_text + attachments_text
+
         # Strip the placeholder text if there's any other updates
         body = body.replace(u'(No comment was entered for this change.)\n\n', u'')
+        comment = {'date': date, 'author': author, 'body': body}
+        comments.append(comment)
 
-        split_comment({'date': date, 'author': author}, body)
-
+    issue['comments'] = comments
     return issue
 
 
