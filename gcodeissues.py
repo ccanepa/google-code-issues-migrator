@@ -1,6 +1,7 @@
 import csv
 from datetime import datetime
 import os
+import cPickle as pickle
 import sys
 import urllib2
 
@@ -23,6 +24,10 @@ _Original issue: {footer}_
 
 EXPORTED_COMMENT_FORMAT_TEMPLATE = u"""
 """
+
+# separators used to produce an editable view of all issues text
+issue_separator = u"\n\n?-?-?-?-?-?-?-issue\n"
+field_separator = u"#-#-#-#-#-#-#-field\n"
 
 
 def gcode_issues_index(google_project_name):
@@ -189,19 +194,51 @@ def get_gcode_issue_new(google_project_name, short_issue):
     return issue
 
 
+def as_editable_text(issues):
+    issues_parts = []
+    for an_issue in issues:
+        all_comments_text = field_separator.join(an_issue['comments'])
+        gid_text = u'%d' % an_issue['gid']
+        issue_text = field_separator.join([gid_text, all_comments_text ])
+        issues_parts.append(issue_text)
+    issues_txt = issue_separator.join(issues_parts)
+    return issues_txt
+
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] == '-h' or sys.argv[1] == '--help':
+    if len(sys.argv) < 3 or sys.argv[1] == '-h' or sys.argv[1] == '--help':
         script = os.path.basename(sys.argv[0])
         usage = "Read all issues from a Google Code project." \
-                "\t usage: %s <google project name>" % script
+                "\t usage: %s <google project name> <outdir>" % script
         print usage
         sys.exit()
     google_project_name = sys.argv[1]
+    outdir = sys.argv[2]
+    if os.path.exists(outdir):
+        print 'outdir exist, refusing to overwrite. Nothing done. outdir:', outdir
+
+    # build and store locally the index
     gcode_index = gcode_issues_index(google_project_name)
+    fname = os.path.join(outdir, 'gcode_issues_index.pkl')
+    with open(fname, "wb") as f:
+        pickle.dump(gcode_index, f)
+    print "*** issues index pickled"
+
+    # build and store locally the detailed issues
     gcode_issues = []
     for short_issue in gcode_index:
         issue = get_gcode_issue_new(google_project_name, short_issue)
         gcode_issues.append(issue)
+    fname = os.path.join(outdir, 'gcode_issues_detailed.pkl')
+    with open(fname, "wb") as f:
+        pickle.dump(gcode_issues, f)
+    print "*** detailed issues  pickled"
+
+    # store locally an editable view of issues text
+    text = as_editable_text(gcode_issues)
+    out_bytes = text.encode('utf-8')
+    fname = os.path.join(outdir, 'gcode_issues_text.txt')
+    with open(fname, 'wb') as f:
+        f.write(out_bytes)
 
 if __name__ == "__main__":
     main()
