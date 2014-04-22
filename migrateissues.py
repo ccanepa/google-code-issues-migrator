@@ -6,14 +6,17 @@ import optparse
 import re
 import sys
 
-from datetime import datetime
-
 from github import Github
-from github import GithubException
+from github import GithubException, BadCredentialsException
 
 import gcodeissues as gi
 
-logging.basicConfig(level = logging.ERROR)
+logging.basicConfig(level=logging.ERROR)
+
+# used to mark a github issue as an imported from googlecode
+GOOGLE_URL_RE = 'http://code.google.com/p/%s/issues/detail\?id=(\d+)'
+GOOGLE_ID_RE = gi.GOOGLE_ISSUE_TEMPLATE.format(GOOGLE_URL_RE)
+
 
 # The minimum number of remaining Github rate-limited API requests before we pre-emptively
 # abort to avoid hitting the limit part-way through migrating an issue.
@@ -24,7 +27,7 @@ GITHUB_SPARE_REQUESTS = 50
 
 LABEL_MAPPING = {
     'Type-Defect' : 'bug',
-    'Type-Enhancement' : 'enhancement'
+    'Type-Enhancement': 'enhancement'
 }
 
 # Mapping from Google Code issue states to Github labels
@@ -35,15 +38,18 @@ STATE_MAPPING = {
     'wontfix': 'wontfix'
 }
 
+
 def output(string):
     sys.stdout.write(string)
     sys.stdout.flush()
+
 
 def escape(s):
     """Process text to convert markup and escape things which need escaping"""
     if s:
         s = s.replace('%', '&#37;')  # Escape % signs
     return s
+
 
 def github_label(name, color = "FFFFFF"):
     """ Returns the Github label with the given name, creating it if necessary. """
@@ -55,17 +61,6 @@ def github_label(name, color = "FFFFFF"):
             return label_cache.setdefault(name, github_repo.get_label(name))
         except GithubException:
             return label_cache.setdefault(name, github_repo.create_label(name, color))
-
-
-def parse_gcode_date(date_text):
-    """ Transforms a Google Code date into a more human readable string. """
-
-    try:
-        parsed = datetime.strptime(date_text, '%a %b %d %H:%M:%S %Y')
-    except ValueError:
-        return date_text
-
-    return parsed.strftime("%B %d, %Y %H:%M:%S")
 
 
 def add_issue_to_github(issue):
@@ -92,7 +87,7 @@ def add_issue_to_github(issue):
     if issue['owner'] and options.assign_owner:
         assignee = github.get_user(github_user.login)
         if not options.dry_run:
-            github_issue.edit(assignee = assignee)
+            github_issue.edit(assignee=assignee)
 
     return github_issue
 
@@ -114,8 +109,6 @@ def add_comments_to_issue(github_issue, gcode_issue):
             if not options.dry_run:
                 github_issue.create_comment(body.encode('utf-8'))
             output('.')
-
-
 
 
 def process_gcode_issues(existing_issues, gcode_issues):
@@ -140,10 +133,10 @@ def process_gcode_issues(existing_issues, gcode_issues):
                 output('Creating dummy entry for missing issue %d\n' % gid)
                 title = 'Google Code skipped issue %d' % gid
                 body = '_Skipping this issue number to maintain synchronization with Google Code issue IDs._'
-                footer = GOOGLE_ISSUE_TEMPLATE.format(GOOGLE_URL.format(google_project_name, gid))
+                footer = gi.GOOGLE_ISSUE_TEMPLATE.format(gi.GOOGLE_URL.format(google_project_name, gid))
                 body += '\n\n' + footer
-                github_issue = github_repo.create_issue(title, body = body, labels = [github_label('imported')])
-                github_issue.edit(state = 'closed')
+                github_issue = github_repo.create_issue(title, body=body, labels=[github_label('imported')])
+                github_issue.edit(state='closed')
                 existing_issues[previous_gid] = github_issue
             previous_gid = issue['gid']
 
@@ -157,7 +150,7 @@ def process_gcode_issues(existing_issues, gcode_issues):
         if github_issue:
             add_comments_to_issue(github_issue, issue)
             if github_issue.state != issue['state']:
-                github_issue.edit(state = issue['state'])
+                github_issue.edit(state=issue['state'])
         output('\n')
 
         log_rate_info()
@@ -188,11 +181,12 @@ def get_existing_github_issues():
                 # TODO we could fix up the label here instead of just warning
                 logging.warn('Issue missing imported label %s- %r - %s', google_id, labels, issue.title)
         imported_count = len(issue_map)
-        logging.info('Found %d Github issues, %d imported',existing_count,imported_count)
+        logging.info('Found %d Github issues, %d imported', existing_count, imported_count)
     except:
         logging.error('Failed to enumerate existing issues')
         raise
     return issue_map
+
 
 def autoedit_gcode_issue(issue):
     """applies transformations for github migration compatibility"""
@@ -201,32 +195,41 @@ def autoedit_gcode_issue(issue):
 
     # filter out uninteresting labels (-> estaria implicito en el que sigue)
     if options.omit_priority:
-        issue.labels = [ label for label in issue.labels
-                                         if not label.startswith('Priority-')]
+        issue.labels = [label for label in issue.labels
+                                        if not label.startswith('Priority-')]
 
     # apply a custom label mapping
-    issue.labels = [ LABEL_MAPPING(label) for label in issue.labels
-                                                    if label in LABEL_MAPPING ]
+    issue.labels = [LABEL_MAPPING[label] for label in issue.labels
+                                                   if label in LABEL_MAPPING]
     # Add additional labels based on the issue's state
     if issue['status'] in STATE_MAPPING:
         issue.labels.append(STATE_MAPPING[issue['status']])
+
 
 def log_rate_info():
     logging.info('Rate limit (remaining/total) %r', github.rate_limiting)
     # Note: this requires extended version of PyGithub from tfmorris/PyGithub repo
     #logging.info('Rate limit (remaining/total) %s',repr(github.rate_limit(refresh=True)))
 
+
 if __name__ == "__main__":
     usage = "usage: %prog [options] <google project name> <github username> <github project>"
     description = "Migrate all issues from a Google Code project to a Github project."
-    parser = optparse.OptionParser(usage = usage, description = description)
+    parser = optparse.OptionParser(usage=usage, description=description)
 
-    parser.add_option("-a", "--assign-owner", action = "store_true", dest = "assign_owner", help = "Assign owned issues to the Github user", default = False)
-    parser.add_option("-d", "--dry-run", action = "store_true", dest = "dry_run", help = "Don't modify anything on Github", default = False)
-    parser.add_option("-p", "--omit-priority", action = "store_true", dest = "omit_priority", help = "Don't migrate priority labels", default = False)
-    parser.add_option("-s", "--synchronize-ids", action = "store_true", dest = "synchronize_ids", help = "Ensure that migrated issues keep the same ID", default = False)
-    parser.add_option("-c", "--google-code-cookie", dest = "google_code_cookie", help = "Cookie to use for Google Code requests. Required to get unmangled names", default = '')
-    parser.add_option('--skip-closed', action = 'store_true', dest = 'skip_closed', help = 'Skip all closed bugs', default = False)
+    parser.add_option("-a", "--assign-owner", action="store_true", dest="assign_owner",
+                      help="Assign owned issues to the Github user", default=False)
+    parser.add_option("-d", "--dry-run", action="store_true", dest="dry_run",
+                      help="Don't modify anything on Github", default=False)
+    parser.add_option("-p", "--omit-priority", action="store_true", dest="omit_priority",
+                      help="Don't migrate priority labels", default=False)
+    parser.add_option("-s", "--synchronize-ids", action="store_true", dest="synchronize_ids",
+                      help="Ensure that migrated issues keep the same ID", default=False)
+    parser.add_option("-c", "--google-code-cookie", dest="google_code_cookie",
+                      help="Cookie to use for Google Code requests. Required to get unmangled names",
+                      default='')
+    parser.add_option('--skip-closed', action='store_true', dest='skip_closed',
+                      help='Skip all closed bugs', default=False)
 
     options, args = parser.parse_args()
 
@@ -234,7 +237,7 @@ if __name__ == "__main__":
         parser.print_help()
         sys.exit()
 
-    label_cache = {} # Cache Github tags, to avoid unnecessary API requests
+    label_cache = {}  # Cache Github tags, to avoid unnecessary API requests
 
     google_project_name, github_user_name, github_project = args
 
@@ -271,11 +274,11 @@ if __name__ == "__main__":
         existing_issues = get_existing_github_issues()
         log_rate_info()
 
-        gcode_index = gi.gcode_issues_index()
-        #gcode_issues = [ get_gcode_issue(short_issue) for short_issue in summary]
+        gcode_index = gi.gcode_issues_index(google_project_name)
+        #gcode_issues = [ get_gcode_issue(google_project_name, short_issue) for short_issue in gcode_index]
         gcode_issues = []
         for short_issue in gcode_index:
-            issue = gi.get_gcode_issue(short_issue)
+            issue = gi.get_gcode_issue(google_project_name, short_issue)
             gcode_issues.append(issue)
 
         # map(autoedit_gcode_issue, gcode_issues)
