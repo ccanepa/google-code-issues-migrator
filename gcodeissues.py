@@ -106,7 +106,7 @@ def get_attachments(link, attachments):
         # Linking to the comment with the attachment rather than the
         # attachment itself since Google Code uses download tokens for
         # attachments
-        body += u'**Attachment:** [{}]({})'.format(attachment('b').text(), link)
+        body += u'**Attachment:** [{0}]({1})'.format(attachment('b').text(), link)
     return body
 
 
@@ -197,7 +197,8 @@ def get_gcode_issue_new(google_project_name, short_issue):
 def as_editable_text(issues):
     issues_parts = []
     for an_issue in issues:
-        all_comments_text = field_separator.join(an_issue['comments'])
+        issue_text_parts = [ comment['body'] for comment in an_issue['comments'] ]
+        all_comments_text = field_separator.join(issue_text_parts)
         gid_text = u'%d' % an_issue['gid']
         issue_text = field_separator.join([gid_text, all_comments_text ])
         issues_parts.append(issue_text)
@@ -211,8 +212,8 @@ def main(index_local, issues_local):
     """
     if len(sys.argv) < 3 or sys.argv[1] == '-h' or sys.argv[1] == '--help':
         script = os.path.basename(sys.argv[0])
-        usage = "Read all issues from a Google Code project." \
-                "\t usage: %s <google project name> <outdir>" % script
+        usage = "Reads all issues from a Google Code project and stores them locally." \
+                "\n\t usage: %s <google project name> <outdir>" % script
         print usage
         sys.exit()
     google_project_name = sys.argv[1]
@@ -265,6 +266,8 @@ def main(index_local, issues_local):
     print "*** editable issues text stored in local storage"
 
 if __name__ == "__main__":
-    index_local = False
-    issues_local = False
+    # When developing changes you can use the flags to avoid hammering googlecode.
+    # After a local save is satisfactory the related flag can be toggled
+    index_local = True
+    issues_local = True
     main(index_local, issues_local)
