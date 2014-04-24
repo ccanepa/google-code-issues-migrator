@@ -11,9 +11,6 @@ from pyquery import PyQuery as pq
 # The maximum number of records to retrieve from Google Code in a single request
 GOOGLE_MAX_RESULTS = 25
 
-GOOGLE_ISSUES_URL = 'https://code.google.com/p/{0}/issues/csv?can=1&num={1}&start={2}&colspec=ID%20Type%20Status%20Owner%20Summary%20Opened%20Closed%20Reporter&sort=id'
-GOOGLE_URL = 'http://code.google.com/p/{0}/issues/detail?id={1}'
-
 EXPORTED_OP_FORMAT_TEMPLATE = u"""
 _From {author} on {date:%B %d, %Y %H:%M:%S}_
 
@@ -22,8 +19,11 @@ _From {author} on {date:%B %d, %Y %H:%M:%S}_
 _Original issue: {footer}_
 """
 
-EXPORTED_COMMENT_FORMAT_TEMPLATE = u"""
-"""
+GOOGLE_ISSUES_URL = 'https://code.google.com/p/{0}/issues/csv?can=1&num={1}&start={2}&colspec=ID%20Type%20Status%20Owner%20Summary%20Opened%20Closed%20Reporter&sort=id'
+# Used to write a link to googlecode issue, also see next comment
+GOOGLE_URL = 'http://code.google.com/p/{0}/issues/detail?id={1}'
+# this used to capture the googlecode issue ID as writen by GOOGLE_URL
+GOOGLE_ISSUE_ID_RE = r'http://code.google.com/p/%s/issues/detail\?id=(\d+)'
 
 # separators used to produce an editable view of all issues text
 issue_separator = u"\n\n?-?-?-?-?-?-?-issue\n"
@@ -121,7 +121,7 @@ def parse_gcode_date(date_text):
     return parsed.strftime("%B %d, %Y %H:%M:%S")
 
 
-def get_gcode_issue_new(google_project_name, short_issue):
+def get_gcode_issue(google_project_name, short_issue):
     def get_author(doc):
         userlink = doc('.userlink')
         return '[{0}](https://code.google.com{1})'.format(userlink.text(), userlink.attr('href'))
@@ -194,7 +194,9 @@ def get_gcode_issue_new(google_project_name, short_issue):
     return issue
 
 
+# code in this function must be in sync with code in partial_issues_from_editable_text
 def as_editable_text(issues):
+    """returns the concatenation of all comments in all issues, with distinct separators"""
     issues_parts = []
     for an_issue in issues:
         issue_text_parts = [ comment['body'] for comment in an_issue['comments'] ]
@@ -204,6 +206,78 @@ def as_editable_text(issues):
         issues_parts.append(issue_text)
     issues_txt = issue_separator.join(issues_parts)
     return issues_txt
+
+
+def partial_issues_from_editable_text(text):
+    """parses the text into a gid: comments dictionary
+
+    text : has the format that 'as_editable_text' used for output
+    """
+    partial_issues = {}
+    issues_parts = text.split(issue_separator)
+    for part in issues_parts:
+        comments_body = part.split(field_separator)
+        gid = int(comments_body.pop(0))
+        partial_issues[gid] = comments_body
+    return partial_issues
+
+
+def update_issues_comments(issues, partial_issues):
+    """
+    issues:
+       each one must be in the format returned by get_gcode_issue, will be modified inplace
+    partial_issues:
+       each one must be in the format returned by partial_issues_from_editable_text
+    """
+    for an_issue in issues:
+        for comment, new_body in zip(an_issue['comments'], partial_issues[an_issue['gid']]):
+            comment['body'] = new_body
+
+
+def issues_in_gid_range(issues, start=None, end=None):
+    if start is None:
+        start = 0
+    if end is None:
+        end = len(issues)
+    filtered_issues = [issue for issue in issues if start <= issue['gid'] < end]
+    return filtered_issues
+
+
+def load_local_gcode_issues(store_dir, edited=True):
+    """loads the locally stored googlecode issues
+
+    store_dir:
+       directory where the original google issues info was saved
+       It is expected to have at least
+          a file 'gcode_issues_detailed.pkl' where the original issues were saved
+          if edited==True a file 'gcode_issues_text.txt
+          Typically the .pkl was produced by running this script with issues_local=True
+          The .txt initially created by running this script with any flags; it may have been
+          edited in a text editor but the field / issues separators must have been preserved.
+    edited:
+       True: replace the comments body with the text parsed from store_dir/from gcode_issues_text.txt
+       False: returns the issues as they were saved
+
+    The paths used have hardcoded short names
+    """
+
+     # load full fledged issues from local storage
+    fname = os.path.join(store_dir, 'gcode_issues_detailed.pkl')
+    with open(fname, 'rb') as f:
+        gcode_issues = pickle.load(f)
+
+    if edited:
+        # load edited text and update the issues with it
+        fname = os.path.join(store_dir, 'gcode_issues_text.txt')
+        with open(fname, 'rb') as f:
+            in_bytes = f.read(f)
+        edited_issues_text = in_bytes.decode('utf-8')
+
+        partial_issues = partial_issues_from_editable_text(edited_issues_text)
+        update_issues_comments(gcode_issues, partial_issues)
+
+    return gcode_issues
+
 
 def main(index_local, issues_local):
     """
@@ -225,7 +299,7 @@ def main(index_local, issues_local):
         print 'Error: asking for all external sources but outdir exist, refusing to overwrite.' \
               ' Nothing done. outdir:', outdir
         sys.exit(1)
-    if (not index_local and not issues_local):
+    if not index_local and not issues_local:
         os.mkdir(outdir)
 
     fname = os.path.join(outdir, 'gcode_issues_index.pkl')
@@ -251,11 +325,13 @@ def main(index_local, issues_local):
         # build and store locally the detailed issues
         gcode_issues = []
         for short_issue in gcode_index:
-            issue = get_gcode_issue_new(google_project_name, short_issue)
+            if len(gcode_issues) % 10 == 0:
+                print '.',
+            issue = get_gcode_issue(google_project_name, short_issue)
             gcode_issues.append(issue)
         with open(fname, "wb") as f:
             pickle.dump(gcode_issues, f)
-        print "*** detailed issues  pickled"
+        print "\n*** detailed issues  pickled"
 
     # store locally an editable view of issues text
     text = as_editable_text(gcode_issues)
@@ -263,11 +339,12 @@ def main(index_local, issues_local):
     fname = os.path.join(outdir, 'gcode_issues_text.txt')
     with open(fname, 'wb') as f:
         f.write(out_bytes)
-    print "*** editable issues text stored in local storage"
+    print "*** editable issues text saved in local storage"
 
 if __name__ == "__main__":
     # When developing changes you can use the flags to avoid hammering googlecode.
-    # After a local save is satisfactory the related flag can be toggled
+    # Initially both should be False, after a local save is satisfactory the related
+    #  flag(s) can be toggled to True
     index_local = True
     issues_local = True
     main(index_local, issues_local)

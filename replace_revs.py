@@ -21,7 +21,7 @@ def dict_of_rev_to_sha(filename):
         revnum = unicode(line[:4].strip())
         assert line[4:6] == '  '
         sha = unicode(line[6:40+6])
-        assert len(line)==(40+6) or line[40+6]==' '
+        assert len(line) == (40+6) or line[40+6] == ' '
         d[revnum] = sha
     return d
 
@@ -30,7 +30,7 @@ def replace_rev_with_sha(text, rev_to_sha, num_sha_digits_to_use):
     """ replaces 'r<revnum>' with 'commit <sha>
 
     text assumed to be unicode
-    <sha> is choped to the first num_sha_digits_to_use
+    <sha> is chopped to the first num_sha_digits_to_use
     """
     conv = {}
     for rev in rev_to_sha:
