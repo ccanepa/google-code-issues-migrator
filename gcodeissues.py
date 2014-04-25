@@ -236,7 +236,7 @@ def update_issues_comments(issues, partial_issues):
 
 def issues_in_gid_range(issues, start=None, end=None):
     if start is None:
-        start = 0
+        start = 1
     if end is None:
         end = len(issues)
     filtered_issues = [issue for issue in issues if start <= issue['gid'] < end]

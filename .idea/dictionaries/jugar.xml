@@ -2,6 +2,7 @@
   <dictionary name="jugar">
     <words>
       <w>autoedit</w>
+      <w>ccanepa</w>
       <w>conv</w>
       <w>delcom</w>
       <w>ffffff</w>
@@ -18,6 +19,8 @@
       <w>outdir</w>
       <w>prog</w>
       <w>revnum</w>
+      <w>testmigration</w>
+      <w>unasigned</w>
       <w>unmangled</w>
       <w>unpaded</w>
       <w>userlink</w>
