@@ -42,7 +42,7 @@ class GithubMigrationSession(object):
             try:
                 return self._label_cache.setdefault(name, self.repo.get_label(name))
             except GithubException:
-                return label_cache.setdefault(name, self.repo.create_label(name, color))
+                return self._label_cache.setdefault(name, self.repo.create_label(name, color))
 
     def log_rate_info(self):
         logging.info('Rate limit (remaining/total) %r', self.session.rate_limiting)
@@ -71,9 +71,9 @@ class GithubMigrationSession(object):
                 try:
                     github_owner = self.session.get_organization(owner_name)
                 except GithubException:
-                    github_owner = github_user
+                    github_owner = self.user
         else:
-            github_owner = github_user
+            github_owner = self.user
         return github_owner.get_repo(github_project)
 
          
@@ -139,7 +139,7 @@ def add_comments_to_issue(github_issue, gcode_issue, dry_run):
             output('.')
 
 
-def process_gcode_issues(gh, existing_issues, gcode_issues, skip_closed, synchronize_ids, dry_run):
+def process_gcode_issues(gh, google_project_name, existing_issues, gcode_issues, skip_closed, synchronize_ids, dry_run):
     """ Migrates all Google Code issues in the given dictionary to Github.
             gcode_issues : list all of gcode issues in the fledged form
     """
@@ -181,7 +181,7 @@ def process_gcode_issues(gh, existing_issues, gcode_issues, skip_closed, synchro
                 github_issue.edit(state=issue['state'])
         output('\n')
 
-        log_rate_info()
+        gh.log_rate_info()
 
 
 def get_existing_github_issues(gh, google_project_name):
@@ -217,65 +217,18 @@ def get_existing_github_issues(gh, google_project_name):
     return issue_map
 
 
-def autoedit_gcode_issue(issue):
+def autoedit_gcode_issue(issue, label_mapping, state_mapping):
     """applies transformations for github migration compatibility / convenience"""
     # add an 'imported' label to help multipass migration / updates
     issue.labels.insert(0, 'imported')
 
     # apply a custom label mapping
-    issue.labels = [LABEL_MAPPING[label] for label in issue.labels
-                                                   if label in LABEL_MAPPING]
+    issue.labels = [label_mapping[label] for label in issue.labels
+                                                   if label in label_mapping]
     # Add additional labels based on the issue's state
-    if issue['status'] in STATE_MAPPING:
-        issue.labels.append(STATE_MAPPING[issue['status']])
+    if issue['status'] in state_mapping:
+        issue.labels.append(state_mapping[issue['status']])
 
 
-def split_long_comments(issue):
-    """expects issue in the format produced by get_gcode_issue"""
-    new_comments = []
-    for comment in issue.comments:
-        if len(comment['body']) > MAX_COMMENT_LENGHT - 3:
-            text = comment['body']
-            comment['body'] = ''
-            while len(text) > len(u'...'):
-                new_comment = comment.copy()
-                new_comment['body'] = text[MAX_COMMENT_LENGHT - 3:] + u'...'
-                new_comments.append(comment)
-                text = u'...' + text[:MAX_COMMENT_LENGHT - 3]
-        else:
-            new_comments.append(comment)
-
-    issue['comments'] = new_comments            
-
-
-if __name__ == "__main__":
-    description = """
-    Migrates all issues from a Google Code project to a Github project.
-    A config.py file should have be set with the needed info.
-    You can edit and rename config.template.py to start your project.
-
-    Usage:
-        %prog [--help] [--really]
-
-    Options:
-        --help : displays this message
-        --really : really write to Github; dry run if not provided
-    """
-    if len(sys.argv)>1:
-        really = (sys.argv[1] == '--really')
-        want_help = not really
-    else:
-        want_help = True
-    if want_help:
-        print description
-        sys.exit()
-
-    try:
-        import config
-    except ImportError:
-        print "\nError: conf.py could not be imported."
-        print description
-        sys.exit(1)
-
-    dry_run = not really
-
+def move_comment_0_to_issue_content(issue):
+    issue['content'] = issue['comments'].pop(0)

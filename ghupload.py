@@ -1,4 +1,9 @@
 import logging
+import os
+import sys
+
+import gcodeissues as gco
+import ghissues as ghi
 
 # >>>>>>>>>>>>>>>>>>>>>>> configuration
 
@@ -52,30 +57,59 @@ def main():
 
     logging.basicConfig(level=logging.ERROR)
 
-    gh = GithubMigrationSession(github_user_name, github_password)
-    
-    try:
-        existing_issues = get_existing_github_issues(gh, google_project_name)
-        log_rate_info()
+    gh = ghi.GithubMigrationSession(github_user_name, github_project)
 
-        gcode_issues = gi.load_local_gcode_issues(gcode_local_dir, edited=True)
+    existing_issues = ghi.get_existing_github_issues(gh, google_project_name)
+    gh.log_rate_info()
 
-        # filter by ID range
-        gcode_issues = gi.issues_in_gid_range(gcode_issues, start, end)
+    gcode_issues = gco.load_local_gcode_issues(gcode_local_dir, edited=True)
 
-        # apply some convenient automatic transformations
-        # map(autoedit_gcode_issue, gcode_issues)
-        for issue in gcode_issues:
-            autoedit_gcode_issue(issue)
+    # filter by ID range
+    gcode_issues = gco.issues_in_gid_range(gcode_issues, start, end)
 
-        # limit the comment length for github
-        for issue in gcode_issues:
-            split_long_comments(issue)
+    # apply some convenient automatic transformations
+    # map(autoedit_gcode_issue, gcode_issues)
+    for issue in gcode_issues:
+        ghi.autoedit_gcode_issue(issue, LABEL_MAPPING, STATE_MAPPING)
 
-        # adapt to the format process_gcode_expects
-        move_comment_0_to_
-        process_gcode_issues(gh, existing_issues, gcode_issues)
-    except Exception:
-        parser.print_help()
-        raise
+    # limit the comment length for github -> este deberia ser el ultimo paso de la
+    # cadena de transformacion
+    for issue in gcode_issues:
+        gco.split_long_comments(issue, ghi.MAX_COMMENT_LENGHT)
+
+    # adapt to the format process_gcode_expects
+    for issue in gcode_issues:
+        ghi.move_comment_0_to_issue_content(issue)
+
+    ghi.process_gcode_issues(gh, google_project_name, existing_issues, gcode_issues)
+
+
+def usage():
+    description = """
+    Uploads to Github the specified range of googlecode issues.
+    Range and other info must have been configured in this same script.
+    The issues to upload must have been stored locally using the
+    companion utility gcodeissues.py
+
+    Usage:
+        %prog [--help] [--really]
+
+    Options:
+        --help : displays this message
+        --really : really write to Github; dry run if not provided
+    """
+    print description % os.path.basename(sys.argv[0])
+    sys.exit()
+
+
+if __name__ == "__main__":
+    if len(sys.argv)>1:
+        really = (sys.argv[1] == '--really')
+        want_help = not really
+    else:
+        want_help = True
+    if want_help:
+        usage()
+    dry_run = not really
+    main(dry_run)
 

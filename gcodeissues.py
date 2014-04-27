@@ -243,6 +243,24 @@ def issues_in_gid_range(issues, start=None, end=None):
     return filtered_issues
 
 
+def split_long_comments(issue, max_comment_length):
+    """expects issue in the format produced by get_gcode_issue"""
+    new_comments = []
+    for comment in issue.comments:
+        if len(comment['body']) > max_comment_length - 3:
+            text = comment['body']
+            comment['body'] = ''
+            while len(text) > len(u'...'):
+                new_comment = comment.copy()
+                new_comment['body'] = text[max_comment_length - 3:] + u'...'
+                new_comments.append(comment)
+                text = u'...' + text[:max_comment_length - 3]
+        else:
+            new_comments.append(comment)
+
+    issue['comments'] = new_comments
+
+
 def load_local_gcode_issues(store_dir, edited=True):
     """loads the locally stored googlecode issues
 
