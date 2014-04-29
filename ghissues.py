@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 
-import cPickle as pickle
 import getpass
 import logging
-import optparse
-import os
 import re
 import sys
 
@@ -26,15 +23,19 @@ MAX_COMMENT_LENGHT = 7000
 class GithubMigrationSession(object):
 
     def __init__(self, github_user_name, github_project):
-         self.session = self._get_session(github_user_name)
-         self.log_rate_info()
-         self.user = self.session.get_user()
-         self.repo = self._get_repo(github_project)
-         self._label_cache = {}
+        self.session = self._get_session(github_user_name)
+        self.log_rate_info()
+        self.user = self.session.get_user()
+        self.repo = self._get_repo(github_project)
+        self._label_cache = {}
 
-    def label(self, name, color = "FFFFFF"):
+    def label(self, name, color = u"FFFFFF"):
         """ Returns the Github label with the given name,
-        creating it if necessary. """
+        creating it if necessary.
+
+        name : unicode
+           text for the existing / new label to create
+        """
 
         try:
             return self._label_cache[name]
@@ -59,7 +60,7 @@ class GithubMigrationSession(object):
                 print "Bad credentials, try again."
         return Github(github_user_name, github_password)
 
-    def _get_github_repo(self, github_project):
+    def _get_repo(self, github_project):
         # If the project name is specified as owner/project, assume that it's
         # owned by either a different user than the one we have credentials for,
         # or an organization.
@@ -139,7 +140,8 @@ def add_comments_to_issue(github_issue, gcode_issue, dry_run):
             output('.')
 
 
-def process_gcode_issues(gh, google_project_name, existing_issues, gcode_issues, skip_closed, synchronize_ids, dry_run):
+def process_gcode_issues(gh, google_project_name, existing_issues, gcode_issues,
+                         assign_owner, skip_closed, synchronize_ids, dry_run):
     """ Migrates all Google Code issues in the given dictionary to Github.
             gcode_issues : list all of gcode issues in the fledged form
     """
@@ -173,7 +175,7 @@ def process_gcode_issues(gh, google_project_name, existing_issues, gcode_issues,
             github_issue = existing_issues[issue['gid']]
             output('Not adding issue %d (exists)' % issue['gid'])
         else:
-            github_issue = add_issue_to_github(gh, issue)
+            github_issue = add_issue_to_github(gh, issue, assign_owner, dry_run)
 
         if github_issue:
             add_comments_to_issue(github_issue, issue, dry_run)
@@ -206,7 +208,7 @@ def get_existing_github_issues(gh, google_project_name):
             google_id = int(id_match.group(1))
             issue_map[google_id] = issue
             labels = [l.name for l in issue.get_labels()]
-            if not 'imported' in labels:
+            if not u'imported' in labels:
                 # TODO we could fix up the label here instead of just warning
                 logging.warn('Issue missing imported label %s- %r - %s', google_id, labels, issue.title)
         imported_count = len(issue_map)
@@ -219,16 +221,18 @@ def get_existing_github_issues(gh, google_project_name):
 
 def autoedit_gcode_issue(issue, label_mapping, state_mapping):
     """applies transformations for github migration compatibility / convenience"""
-    # add an 'imported' label to help multipass migration / updates
-    issue.labels.insert(0, 'imported')
-
     # apply a custom label mapping
-    issue.labels = [label_mapping[label] for label in issue.labels
+    labels = [label_mapping[label] for label in issue['labels']
                                                    if label in label_mapping]
+
+    # add an 'imported' label to help multipass migration / updates
+    labels.insert(0, u'imported')
+
     # Add additional labels based on the issue's state
     if issue['status'] in state_mapping:
-        issue.labels.append(state_mapping[issue['status']])
+        labels.append(state_mapping[issue['status']])
 
+    issue['labels'] = labels
 
 def move_comment_0_to_issue_content(issue):
-    issue['content'] = issue['comments'].pop(0)
+    issue['content'] = issue['comments'].pop(0)['body']

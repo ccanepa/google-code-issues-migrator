@@ -29,6 +29,10 @@ GOOGLE_ISSUE_ID_RE = r'http://code.google.com/p/%s/issues/detail\?id=(\d+)'
 issue_separator = u"\n\n?-?-?-?-?-?-?-issue\n"
 field_separator = u"#-#-#-#-#-#-#-field\n"
 
+# DEBUG - fixing injected '\r' by git into the text storage
+issue_separator = u"\r\n\r\n?-?-?-?-?-?-?-issue\r\n"
+field_separator = u"#-#-#-#-#-#-#-field\r\n"
+
 
 def gcode_issues_index(google_project_name):
     """
@@ -134,7 +138,8 @@ def get_gcode_issue(google_project_name, short_issue):
         'owner': short_issue[b'Owner'],
         'state': 'closed' if short_issue[b'Closed'] else 'open',
         'date': datetime.fromtimestamp(float(short_issue[b'OpenedTimestamp'])),
-        'status': short_issue[b'Status'].lower()
+        'status': short_issue[b'Status'].lower(),
+        'labels': short_issue['AllLabels'].decode('utf-8').split(u', ')
     }
 
     # Scrape the issue details page for the issue body and comments
@@ -217,6 +222,7 @@ def partial_issues_from_editable_text(text):
     issues_parts = text.split(issue_separator)
     for part in issues_parts:
         comments_body = part.split(field_separator)
+        print 'comments_body[0]:', comments_body[0]
         gid = int(comments_body.pop(0))
         partial_issues[gid] = comments_body
     return partial_issues
@@ -246,7 +252,7 @@ def issues_in_gid_range(issues, start=None, end=None):
 def split_long_comments(issue, max_comment_length):
     """expects issue in the format produced by get_gcode_issue"""
     new_comments = []
-    for comment in issue.comments:
+    for comment in issue['comments']:
         if len(comment['body']) > max_comment_length - 3:
             text = comment['body']
             comment['body'] = ''
@@ -288,7 +294,7 @@ def load_local_gcode_issues(store_dir, edited=True):
         # load edited text and update the issues with it
         fname = os.path.join(store_dir, 'gcode_issues_text.txt')
         with open(fname, 'rb') as f:
-            in_bytes = f.read(f)
+            in_bytes = f.read()
         edited_issues_text = in_bytes.decode('utf-8')
 
         partial_issues = partial_issues_from_editable_text(edited_issues_text)

@@ -14,7 +14,7 @@ google_project_name = 'los-cocos'
 gcode_local_dir = 'save1'
 
 github_user_name = 'ccanepa'
-github_project = 'testmigration'
+github_project = 'cocos2d/cocos2d-python'
 
 # True assigns github_user_name as the issue owner for all issues,
 # False lets all issues unasigned
@@ -30,13 +30,13 @@ skip_closed = False
 # end; set end to None to mean 'all issues with ID >= start'
 # ID s are 1-Based 
 start = 1
-end = 10
+end = None
 
 # Mapping from Google Code issue labels to Github labels
 
 LABEL_MAPPING = {
-    'Type-Defect': 'bug',
-    'Type-Enhancement': 'enhancement'
+    u'Type-Defect': 'bug',
+    u'Type-Enhancement': 'enhancement'
 }
 
 # Mapping from Google Code issue states to Github labels
@@ -50,7 +50,7 @@ STATE_MAPPING = {
 # <<<<<<<<<<<<<<<<<<<<<< configuration
 
 
-def main():
+def main(dry_run):
     if not os.path.isdir(gcode_local_dir):
         print "Error: directory to load googlecode issues does not exists:", gcode_local_dir
         sys.exit(1)
@@ -81,7 +81,8 @@ def main():
     for issue in gcode_issues:
         ghi.move_comment_0_to_issue_content(issue)
 
-    ghi.process_gcode_issues(gh, google_project_name, existing_issues, gcode_issues)
+    ghi.process_gcode_issues(gh, google_project_name, existing_issues, gcode_issues,
+                             assign_owner, skip_closed, synchronize_ids, dry_run)
 
 
 def usage():
@@ -92,7 +93,7 @@ def usage():
     companion utility gcodeissues.py
 
     Usage:
-        %prog [--help] [--really]
+        %s [--help] [--really]
 
     Options:
         --help : displays this message
@@ -103,11 +104,13 @@ def usage():
 
 
 if __name__ == "__main__":
-    if len(sys.argv)>1:
-        really = (sys.argv[1] == '--really')
-        want_help = not really
-    else:
-        want_help = True
+    really = False
+    want_help = False
+    if len(sys.argv) > 1:
+        if (sys.argv[1] == '--really'):
+            really = True
+        else:
+            want_help = True
     if want_help:
         usage()
     dry_run = not really
