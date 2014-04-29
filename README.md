@@ -1,7 +1,7 @@
-This is a simple script to migrate issues from Google Code to Github.
+Scripts to migrate issues from Google Code to Github.
 
-For a full history of changes, please
-consult the [change log](https://github.com/arthur-debert/google-code-issues-migrator/blob/master/CHANGES.md).
+This is a fork of https://github.com/skirpichev/google-code-issues-migrator
+which is a fork of https://github.com/arthur-debert/google-code-issues-migrator
 
 ## THIS SCRIPT WILL SEND A LOT OF EMAILS TO ALL WATCHERS
 
@@ -27,12 +27,19 @@ creating matching issues and comments in Github. This has some limitations:
    listed as links to the attachment on Google Code.
 
  - Support for Merged-into links for duplicate issues are not implemented.
+ 
+ - Allow to edit issues text and comments locally before upload.
+   This is handy to replace references to svn revisions like 'r1234' with the
+   matching git commit sha or to add some mardown markup.
+   This is a feature new in this fork.
 
 Otherwise almost everything is preserved, including labels, issue state
 (open/closed), and issue status (invalid, wontfix, duplicate).
 
-The script can be run repeatedly to migrate new issues and comments, without
-mucking up what's already on Github.
+The original script allowed to be run repeatedly to migrate new issues and comments,
+without mucking up what's already on Github; this fork does not support that if
+you locally edit the issues, but it should not be hard to add a update_gcode_issues
+to support this scenario.
 
 ### Required Python libraries ###
 
@@ -40,45 +47,31 @@ Run `pip install -r requirements.txt` to install all required libraries.
 
 ### Usage ###
 
-    migrateissues.py [options] <google project name> <github username> <github project>
+Edit ghupload.py to configure the migration options.
+It is a good idea to first export to a 'testmigration' project and when
+satisfied with the results set the real github project target and make
+a final upload.
 
-      google_project_name       The project name (from the URL) from google code
-      github_user_name          The Github username
-      github_project            The Github project name, e.g. username/project
+Run gcodeissues.py to download and store locally  the googlecode issues information
+	gcodeissues.py <google project name> <local storage directory>
 
-    Options:
-      -h, --help                Show this help message and exit
-      -a, --assign-owner        Assign owned issues to the Github user
-      -d, --dry-run             Don't modify anything on Github
-      -p, --omit-priority       Don't migrate priority labels
-      -s, --synchronize-ids     Ensure that migrated issues keep the same ID
-      -c, --google-code-cookie  Supply cookies to use for scraping Google Code
-      --skip-closed             Skip all closed bugs
+Edit as desired <google project name>/gcode_issues_text.txt .
+In particular, replace_revs.py can be run to replace svn revision numbers with the git sha.
 
-        You will be prompted for your github password.
+The final result will look better if some markup is manually added at this stage, like
+	tracebacks -> surround with literal block marks
+	python code blocks -> surround with python code block marks
+	names with double underscores not in a block -> surround with inline literal marks
 
-`--assign-owner` automatically assigns any issues that currently have an owner
-to your Github user (the one running the script), even if you weren't the
-original owner. This is used to save a little time in cases where you do in
-fact own most issues.
+Warning: if you think to put under version control <local storage directory> and your OS
+is Windows, be sure to arrange the line endings are not messed up.
+git by default will change line endings, to prevent that add a
+.gitattributes file in <local storage directory> with
+```
+    *.txt -text
+    *.pkl -text
+```
 
-`--dry-run` does as much as possible without actually adding anything to
-Github. It's useful as a test, to turn up any errors or unexpected behaviors
-before you run the script, irreversibly, on your real repository.
+Run ghupload.py --really to upload to github
 
-`--omit-priorities` skips migration of Google Code Priority labels, since many
-projects don't actually use them, and would just remove them from Github
-anyway.
-
-`--synchronize-ids` attempts to ensure that every Github issue gets the same ID
-as its original Google Code issue. Normally this happens anyway, but in some
-cases Google Code skips issue numbers; this option fills the gaps with dummy
-issues to ensure that the next real issue keeps the same numbering. This only
-works, of course, if the migration starts with a fresh Github repistory.
-
-`--google-code-cookie` takes a HTTP header encoded cookie to use when fetching
-pages from Google Code. Google Code normally mangles names for spam prevention,
-and getting the raw names requires being logged in and having filled out a
-CAPTCHA.
-
-`--skip-closed` will skip migrating issues that were closed.
+This workflow and code was last used at 2014 04 28

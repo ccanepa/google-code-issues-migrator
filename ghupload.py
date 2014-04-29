@@ -8,13 +8,19 @@ import ghissues as ghi
 # >>>>>>>>>>>>>>>>>>>>>>> configuration
 
 # The googlecode project name
-google_project_name = 'los-cocos'
+google_project_name = 'your project'
 
 # Directory to store google code issues info
 gcode_local_dir = 'save1'
 
-github_user_name = 'ccanepa'
-github_project = 'cocos2d/cocos2d-python'
+# Github user
+github_user_name = 'your user'
+
+# Github project
+# for personal projects
+github_project = 'your project'
+### for organization projects
+##github_project = 'organization/project'
 
 # True assigns github_user_name as the issue owner for all issues,
 # False lets all issues unasigned

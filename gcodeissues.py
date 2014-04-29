@@ -29,10 +29,6 @@ GOOGLE_ISSUE_ID_RE = r'http://code.google.com/p/%s/issues/detail\?id=(\d+)'
 issue_separator = u"\n\n?-?-?-?-?-?-?-issue\n"
 field_separator = u"#-#-#-#-#-#-#-field\n"
 
-# DEBUG - fixing injected '\r' by git into the text storage
-issue_separator = u"\r\n\r\n?-?-?-?-?-?-?-issue\r\n"
-field_separator = u"#-#-#-#-#-#-#-field\r\n"
-
 
 def gcode_issues_index(google_project_name):
     """
@@ -244,7 +240,7 @@ def issues_in_gid_range(issues, start=None, end=None):
     if start is None:
         start = 1
     if end is None:
-        end = len(issues)
+        end = len(issues) + 1
     filtered_issues = [issue for issue in issues if start <= issue['gid'] < end]
     return filtered_issues
 
@@ -369,6 +365,6 @@ if __name__ == "__main__":
     # When developing changes you can use the flags to avoid hammering googlecode.
     # Initially both should be False, after a local save is satisfactory the related
     #  flag(s) can be toggled to True
-    index_local = True
-    issues_local = True
+    index_local = False
+    issues_local = False
     main(index_local, issues_local)
