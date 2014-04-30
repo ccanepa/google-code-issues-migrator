@@ -66,7 +66,7 @@ The final result will look better if some markup is manually added at this stage
 	- python code blocks -> surround with python code block marks
 	- names with double underscores not in a block -> surround with inline literal marks
 
-Warning: if you think to put under version control <local storage directory> and your OS
+Warning: if you think to put under version control `<local storage directory>` and your OS
 is Windows, be sure to arrange the line endings are not messed up.
 git by default will change line endings, to prevent that add a
 .gitattributes file in `<local storage directory>` with
