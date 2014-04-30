@@ -60,7 +60,8 @@ Run gcodeissues.py to download and store locally  the googlecode issues informat
 Edit as desired `<google project name>/gcode_issues_text.txt` .
 In particular, replace_revs.py can be run to replace svn revision numbers with the git sha.
 
-The final result will look better if some markup is manually added at this stage, like
+The final result will look better if some markup is manually added at this stage, like:
+
 	- tracebacks -> surround with literal block marks
 	- python code blocks -> surround with python code block marks
 	- names with double underscores not in a block -> surround with inline literal marks
