@@ -53,25 +53,27 @@ satisfied with the results set the real github project target and make
 a final upload.
 
 Run gcodeissues.py to download and store locally  the googlecode issues information
+```
 	gcodeissues.py <google project name> <local storage directory>
+```
 
-Edit as desired <google project name>/gcode_issues_text.txt .
+Edit as desired `<google project name>/gcode_issues_text.txt` .
 In particular, replace_revs.py can be run to replace svn revision numbers with the git sha.
 
 The final result will look better if some markup is manually added at this stage, like
-	tracebacks -> surround with literal block marks
-	python code blocks -> surround with python code block marks
-	names with double underscores not in a block -> surround with inline literal marks
+	- tracebacks -> surround with literal block marks
+	- python code blocks -> surround with python code block marks
+	- names with double underscores not in a block -> surround with inline literal marks
 
 Warning: if you think to put under version control <local storage directory> and your OS
 is Windows, be sure to arrange the line endings are not messed up.
 git by default will change line endings, to prevent that add a
-.gitattributes file in <local storage directory> with
+.gitattributes file in `<local storage directory>` with
 ```
     *.txt -text
     *.pkl -text
 ```
 
-Run ghupload.py --really to upload to github
+Run `ghupload.py --really` to upload to github
 
 This workflow and code was last used at 2014 04 28
