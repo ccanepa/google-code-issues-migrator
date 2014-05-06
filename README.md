@@ -3,6 +3,11 @@ Scripts to migrate issues from Google Code to Github.
 This is a fork of https://github.com/skirpichev/google-code-issues-migrator
 which is a fork of https://github.com/arthur-debert/google-code-issues-migrator
 
+### New in this fork ###
+
+googlecode issues are stored locally and can be edited before upload to github.
+This is handy to convert svn revision numbers to git sha s or to add markup.
+
 ## THIS SCRIPT WILL SEND A LOT OF EMAILS TO ALL WATCHERS
 
 Github's API does not support creating issues or adding comments without
@@ -75,6 +80,14 @@ git by default will change line endings, to prevent that add a
     *.pkl -text
 ```
 
-Run `ghupload.py --really` to upload to github
+Run `ghupload.py --really` to upload to github.
 
-This workflow and code was last used at 2014 04 28
+If the upload is interrupted, by example by quotas in github API or timeouts,
+the script can be re-run to complete the work.
+
+In that case, to spare some transactions it is better to set the 'start' parameter
+to the last issue transmited.
+
+Obviously if the problem was a quota exceded or a github outage you will need to wait some time before rerun. 
+
+This workflow and code was last used at 2014 05 06
