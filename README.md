@@ -52,17 +52,25 @@ Run `pip install -r requirements.txt` to install all required libraries.
 
 ### Usage ###
 
+#### Configure ####
+
 Edit ghupload.py to configure the migration options.
+
 It is a good idea to first export to a 'testmigration' project and when
-satisfied with the results set the real github project target and make
-a final upload.
+satisfied with the results set the real github project target.
+
+#### Download googlecode issues ####
 
 Run gcodeissues.py to download and store locally  the googlecode issues information
 ```
 	gcodeissues.py <google project name> <local storage directory>
 ```
 
-Edit as desired `<google project name>/gcode_issues_text.txt` .
+#### Edit locally the issues ####
+
+Edit as desired `<local storage directory>/gcode_issues_text.txt` , make sure to not touch
+the issue and field delimiters.
+
 In particular, replace_revs.py can be run to replace svn revision numbers with the git sha.
 
 The final result will look better if some markup is manually added at this stage, like:
@@ -80,6 +88,8 @@ git by default will change line endings, to prevent that add a
     *.pkl -text
 ```
 
+#### Upload to Github ####
+ 
 Run `ghupload.py --really` to upload to github.
 
 If the upload is interrupted, by example by quotas in github API or timeouts,
